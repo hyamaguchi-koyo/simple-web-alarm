@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Alarm</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      text-align: center;
+      width: 340px;
+    }
+
+    .clock {
+      font-size: 4rem;
+      font-weight: 200;
+      letter-spacing: 2px;
+      margin-bottom: 40px;
+    }
+
+    .set-alarm {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 28px 24px;
+    }
+
+    .set-alarm h2 {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 20px;
+      color: #aaa;
+    }
+
+    .time-inputs {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .time-inputs input {
+      width: 80px;
+      padding: 12px;
+      font-size: 1.4rem;
+      text-align: center;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #0f3460;
+      color: #eee;
+      outline: none;
+    }
+
+    .time-inputs input:focus {
+      border-color: #e94560;
+    }
+
+    .time-inputs span {
+      font-size: 1.6rem;
+      color: #666;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #setBtn {
+      background: #e94560;
+      color: #fff;
+    }
+
+    #setBtn:hover { background: #c73a52; }
+
+    #stopBtn {
+      background: #333;
+      color: #fff;
+      display: none;
+      margin-top: 10px;
+    }
+
+    #stopBtn:hover { background: #555; }
+
+    .alarm-info {
+      margin-top: 16px;
+      font-size: 0.9rem;
+      color: #888;
+      min-height: 1.4em;
+    }
+
+    .ringing {
+      animation: pulse 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { opacity: 1; }
+      to { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="clock" id="clock">00:00:00</div>
+    <div class="set-alarm">
+      <h2>SET ALARM</h2>
+      <div class="time-inputs">
+        <input type="number" id="alarmHour" min="0" max="23" placeholder="HH">
+        <span>:</span>
+        <input type="number" id="alarmMin" min="0" max="59" placeholder="MM">
+      </div>
+      <button id="setBtn">Set Alarm</button>
+      <button id="stopBtn">Stop</button>
+      <div class="alarm-info" id="alarmInfo"></div>
+    </div>
+  </div>
+
+  <script>
+    const clockEl = document.getElementById('clock');
+    const hourInput = document.getElementById('alarmHour');
+    const minInput = document.getElementById('alarmMin');
+    const setBtn = document.getElementById('setBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const infoEl = document.getElementById('alarmInfo');
+
+    let alarmTime = null;
+    let audioCtx = null;
+    let oscillator = null;
+    let isRinging = false;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function updateClock() {
+      const now = new Date();
+      clockEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+      if (alarmTime && !isRinging) {
+        const current = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        if (current === alarmTime && now.getSeconds() === 0) {
+          startRinging();
+        }
+      }
+    }
+
+    function startRinging() {
+      isRinging = true;
+      clockEl.classList.add('ringing');
+      stopBtn.style.display = 'block';
+      infoEl.textContent = 'ALARM!';
+
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      playBeep();
+    }
+
+    function playBeep() {
+      if (!isRinging) return;
+      oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+      gain.gain.value = 0.3;
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.2);
+      setTimeout(() => { if (isRinging) playBeep(); }, 500);
+    }
+
+    function stopAlarm() {
+      isRinging = false;
+      alarmTime = null;
+      clockEl.classList.remove('ringing');
+      stopBtn.style.display = 'none';
+      setBtn.textContent = 'Set Alarm';
+      infoEl.textContent = '';
+      if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    }
+
+    setBtn.addEventListener('click', () => {
+      if (alarmTime) {
+        alarmTime = null;
+        setBtn.textContent = 'Set Alarm';
+        infoEl.textContent = '';
+        return;
+      }
+
+      const h = parseInt(hourInput.value);
+      const m = parseInt(minInput.value);
+      if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        infoEl.textContent = '正しい時刻を入力してください';
+        return;
+      }
+
+      alarmTime = `${pad(h)}:${pad(m)}`;
+      setBtn.textContent = 'Cancel';
+      infoEl.textContent = `Alarm set for ${alarmTime}`;
+    });
+
+    stopBtn.addEventListener('click', stopAlarm);
+
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+</body>
+</html>
